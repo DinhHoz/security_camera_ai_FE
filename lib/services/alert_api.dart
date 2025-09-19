@@ -1,20 +1,23 @@
 import 'dart:convert';
+import 'package:frontend/models/alert.dart';
 import 'package:http/http.dart' as http;
-import '../../models/alert.dart';
 import 'api_config.dart';
+import '../models/alert.dart';
 
 class AlertApi {
-  Future<List<Alert>> getAlerts() async {
+  Future<List<Alert>> getAlerts(String token) async {
     final res = await http.get(
-      Uri.parse('${ApiConfig.baseUrl}/alerts'),
-      headers: ApiConfig.headers,
+      Uri.parse('${ApiConfig.baseUrl}/api/alerts'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
     );
 
     if (res.statusCode == 200) {
-      final List data = jsonDecode(res.body);
-      return data.map((e) => Alert.fromJson(e)).toList();
+      return json.decode(res.body);
     } else {
-      throw Exception("Failed to load alerts: ${res.statusCode}");
+      throw Exception('Failed to load alerts');
     }
   }
 }

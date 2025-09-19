@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'login_screen.dart';
-import '../screens/cameras_screen.dart'; // Thêm import
+import 'device_camera_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -64,9 +64,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _navigateToCamera() {
+    // Thay URL này thành luồng RTSP H.264 của camera bạn
+    const String cameraUrl = "rtsp://admin:Hieucamera@192.168.1.76:554/onvif1";
+
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const CameraScreen()),
+      MaterialPageRoute(
+        builder: (_) => const DeviceCameraScreen(streamUrl: cameraUrl),
+      ),
     );
   }
 

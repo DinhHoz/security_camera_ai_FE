@@ -1,5 +1,5 @@
 class ApiConfig {
-  static const String baseUrl = "http://192.168.2.28:3000";
+  static const String baseUrl = "http://192.168.1.214:3000";
   static String getDetectUrl() => "$baseUrl/api/detect";
   static String? _token;
 

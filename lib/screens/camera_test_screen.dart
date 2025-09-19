@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/api_config.dart';
+import 'alertDetailScreen.dart'; // 👈 thêm import để chuyển màn hình
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -30,7 +31,6 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _loadTokenAndSetupCamera() async {
-    // Tải token từ SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('id_token');
     if (token == null || token.isEmpty) {
@@ -44,7 +44,6 @@ class _CameraScreenState extends State<CameraScreen> {
     _authToken = token;
     if (kDebugMode) print("Loaded token: ${_authToken!.substring(0, 10)}...");
 
-    // Khởi tạo camera
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
@@ -61,7 +60,6 @@ class _CameraScreenState extends State<CameraScreen> {
       await _initializeControllerFuture;
       if (!mounted) return;
       setState(() {});
-      // Bắt đầu chụp ảnh định kỳ
       _timer = Timer.periodic(
         const Duration(seconds: 3),
         (_) => _captureAndSend(),
@@ -123,31 +121,20 @@ class _CameraScreenState extends State<CameraScreen> {
         }
         return;
       }
-      if (kDebugMode)
-        print("Sending request with token: ${token.substring(0, 10)}...");
 
       final url = ApiConfig.getDetectUrl();
-      if (kDebugMode) print("Using API URL: $url");
       if (url.isEmpty) {
         setState(() => _result = "URL API không hợp lệ!");
         _isProcessing = false;
         return;
       }
-      Uri uri;
-      try {
-        uri = Uri.parse(url);
-      } catch (e) {
-        setState(() => _result = "Lỗi phân tích URL: $e");
-        _isProcessing = false;
-        return;
-      }
+      Uri uri = Uri.parse(url);
 
       var request = http.MultipartRequest("POST", uri);
       request.headers.addAll({"Authorization": "Bearer $token"});
       request.files.add(
         await http.MultipartFile.fromPath("image", picture.path),
       );
-      if (kDebugMode) print("Sending request to $url");
 
       var response = await request.send().timeout(
         const Duration(seconds: 10),
@@ -156,8 +143,6 @@ class _CameraScreenState extends State<CameraScreen> {
         },
       );
       final resBody = await response.stream.bytesToString();
-      if (kDebugMode)
-        print("Response status: ${response.statusCode}, body: $resBody");
 
       if (response.statusCode != 200) {
         setState(
@@ -170,7 +155,6 @@ class _CameraScreenState extends State<CameraScreen> {
       dynamic jsonData;
       try {
         jsonData = jsonDecode(resBody);
-        if (kDebugMode) print("Phản hồi API: $jsonData");
       } catch (e) {
         setState(() => _result = "Phản hồi không phải JSON: $resBody - $e");
         _isProcessing = false;
@@ -187,17 +171,33 @@ class _CameraScreenState extends State<CameraScreen> {
       const double confidenceThreshold = 0.7;
       if (fireDetected &&
           confidence != null &&
-          confidence >= confidenceThreshold) {
-        if (detectedClass == "fire" || detectedClass == "smoke") {
-          _showAlert(
+          confidence >= confidenceThreshold &&
+          (detectedClass == "fire" || detectedClass == "smoke")) {
+        // 👇 đổi logic: không showDialog, mà mở AlertDetailScreen
+        final alertData = {
+          "cameraId": "cam1",
+          "cameraName": "Test Camera",
+          "location": "Office",
+          "status": "fire_detected",
+          "timestamp": DateTime.now().toIso8601String(),
+          "imageUrl": "", // có thể lấy ảnh từ backend nếu có
+          "type": detectedClass,
+          "confidence": confidence,
+        };
+
+        if (mounted) {
+          Navigator.push(
             context,
-            "Phát hiện $detectedClass!\nĐộ tin cậy: ${(confidence * 100).toStringAsFixed(2)}%",
+            MaterialPageRoute(
+              builder: (context) => AlertDetailScreen(alert: alertData),
+            ),
           );
-          setState(() {
-            _result =
-                "Phát hiện: $detectedClass\nĐộ tin cậy: ${(confidence * 100).toStringAsFixed(2)}%";
-          });
         }
+
+        setState(() {
+          _result =
+              "Phát hiện: $detectedClass\nĐộ tin cậy: ${(confidence * 100).toStringAsFixed(2)}%";
+        });
       } else {
         setState(() {
           _result =
@@ -209,23 +209,6 @@ class _CameraScreenState extends State<CameraScreen> {
     } finally {
       _isProcessing = false;
     }
-  }
-
-  void _showAlert(BuildContext context, String message) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text("Thông báo"),
-            content: Text(message),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("OK"),
-              ),
-            ],
-          ),
-    );
   }
 
   @override

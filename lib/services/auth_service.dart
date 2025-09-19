@@ -1,19 +1,27 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';  // Để lưu token nếu cần
+import 'package:shared_preferences/shared_preferences.dart'; // Để lưu token nếu cần
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static String? _token;
 
   // Đăng nhập với email/password
-  static Future<String?> signInWithEmailAndPassword(String email, String password) async {
+  static Future<String?> signInWithEmailAndPassword(
+    String email,
+    String password,
+  ) async {
     try {
-      final userCredential = await _auth.signInWithEmailAndPassword(email: email, password: password);
-      final idToken = await userCredential.user?.getIdToken();  // Lấy ID token
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final idToken = await userCredential.user?.getIdToken();
       _token = idToken;
-      // Lưu token vào SharedPreferences nếu cần
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_token', _token!);
+      await prefs.setString(
+        'id_token',
+        _token!,
+      ); // ✅ Đã sửa key thành 'id_token'
       return _token;
     } catch (e) {
       print('Sign-in error: $e');
@@ -25,13 +33,23 @@ class AuthService {
   static Future<String?> getToken() async {
     final user = _auth.currentUser;
     if (user != null) {
-      _token = await user.getIdToken();  // Lấy token mới nhất (tự động refresh nếu cần)
+      _token = await user.getIdToken(true); // Tự động làm mới token nếu cần
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('id_token', _token!); // ✅ Lưu token mới
       return _token;
     }
-    // Nếu chưa có, tải từ SharedPreferences
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('auth_token');
+    _token = prefs.getString('id_token'); // ✅ Lấy từ key 'id_token'
     return _token;
+  }
+
+  // Phương thức mới để lấy Authorization Header
+  static Future<String?> getAuthHeader() async {
+    final token = await getToken();
+    if (token != null && token.isNotEmpty) {
+      return 'Bearer $token';
+    }
+    return null;
   }
 
   // Đăng xuất
@@ -39,7 +57,8 @@ class AuthService {
     await _auth.signOut();
     _token = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
+    await prefs.remove('id_token');
+    await prefs.remove('password');
   }
 
   // Listener cho thay đổi token (tự động cập nhật)

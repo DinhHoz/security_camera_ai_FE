@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'home_screen.dart';
-import 'package:flutter/foundation.dart';
+import '../services/auth_service.dart';
+import 'UI_device.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,17 +37,13 @@ class _LoginScreenState extends State<LoginScreen> {
         // Lưu token vào SharedPreferences
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('id_token', idToken);
-        if (kDebugMode) {
-          print(
-            'Login successful, token saved: ${idToken.substring(0, 10)}...',
-          );
-        }
+        print('Login successful, token saved: ${idToken.substring(0, 10)}...');
 
-        // Chuyển đến HomeScreen
+        // Chuyển đến DeviceScreen
         if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
+            MaterialPageRoute(builder: (_) => const DeviceScreen()),
           );
         }
       } else {
@@ -64,9 +60,23 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMessage = 'Lỗi không xác định: $e';
       });
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    await AuthService.signOut();
+    // Sau khi xóa token & password -> quay lại màn hình Login
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
     }
   }
 
