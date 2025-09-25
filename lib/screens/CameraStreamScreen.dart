@@ -1,23 +1,17 @@
-// lib/screens/camera_stream_screen.dart
-
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-// Thay đổi đường dẫn này để trỏ đến file auth_service.dart của bạn
 import '../services/auth_service.dart';
+import '../models/camera.dart'; // import model Camera từ file camera.dart
 
 class CameraStreamScreen extends StatefulWidget {
-  final String streamUrl;
-  final String cameraName;
+  final Camera camera; // dùng Camera từ model
 
-  const CameraStreamScreen({
-    super.key,
-    required this.streamUrl,
-    required this.cameraName,
-  });
+  const CameraStreamScreen({super.key, required this.camera});
 
   @override
   State<CameraStreamScreen> createState() => _CameraStreamScreenState();
@@ -27,25 +21,24 @@ class _CameraStreamScreenState extends State<CameraStreamScreen> {
   late VlcPlayerController _vlcController;
   int _frameCounter = 0;
   bool _isProcessing = false;
-  // URL của backend. Dùng 10.0.2.2 cho Android Emulator để trỏ tới localhost của máy tính.
-  // Nếu chạy trên máy thật, hãy dùng IP của máy tính trong mạng LAN (ví dụ: 192.168.1.10).
+
+  // Backend APIs
   final String _detectionApiUrl = "http://192.168.1.214:3000/api/detect";
+  // Không cần _alertsApiUrl vì backend đã xử lý
 
   @override
   void initState() {
     super.initState();
     _vlcController = VlcPlayerController.network(
-      widget.streamUrl,
+      widget.camera.streamUrl,
       hwAcc: HwAcc.full,
       autoPlay: true,
       options: VlcPlayerOptions(),
     );
-    // Thêm listener để theo dõi trạng thái của player và xử lý frame
     _vlcController.addListener(_frameProcessingListener);
   }
 
   void _frameProcessingListener() {
-    // Chỉ xử lý khi video đang phát và không có tác vụ nào khác đang chạy
     if (_vlcController.value.isPlaying && !_isProcessing) {
       _processAndSendFrame();
     }
@@ -55,7 +48,7 @@ class _CameraStreamScreenState extends State<CameraStreamScreen> {
     _isProcessing = true;
     _frameCounter++;
 
-    // Chỉ chụp và gửi frame thứ 10 để giảm tải
+    // Gửi 1 frame mỗi 10 lần (giảm tải)
     if (_frameCounter % 10 == 0) {
       try {
         final Uint8List? imageData = await _vlcController.takeSnapshot();
@@ -63,7 +56,7 @@ class _CameraStreamScreenState extends State<CameraStreamScreen> {
           await _sendFrameForDetection(imageData);
         }
       } catch (e) {
-        print("Lỗi khi xử lý frame: $e");
+        print("❌ Lỗi khi xử lý frame: $e");
       }
     }
 
@@ -72,46 +65,64 @@ class _CameraStreamScreenState extends State<CameraStreamScreen> {
 
   Future<void> _sendFrameForDetection(Uint8List imageData) async {
     try {
-      // Lấy header xác thực đã được định dạng sẵn từ AuthService
       final authHeader = await AuthService.getAuthHeader();
-
-      // Nếu không có header (người dùng chưa đăng nhập), dừng lại
       if (authHeader == null) {
-        print("Không thể gửi request. Header xác thực không tồn tại.");
+        print("❌ Không có token xác thực.");
         return;
       }
 
       var request = http.MultipartRequest('POST', Uri.parse(_detectionApiUrl));
-
-      // Thêm header vào request
       request.headers['Authorization'] = authHeader;
 
-      // Đính kèm file ảnh
+      // Metadata camera từ model
+      request.fields['cameraId'] = widget.camera.id;
+      request.fields['cameraName'] = widget.camera.cameraName;
+      request.fields['location'] = widget.camera.location;
+
+      // Gửi ảnh snapshot
       request.files.add(
         http.MultipartFile.fromBytes(
-          'image', // Tên field này phải khớp với backend
+          'image',
           imageData,
           filename: 'frame.jpg',
           contentType: MediaType('image', 'jpeg'),
         ),
       );
 
-      print("Đang gửi frame đến backend...");
+      print("📤 Gửi frame [${_frameCounter}] đến backend detect...");
       final response = await request.send();
+      final respStr = await response.stream.bytesToString();
 
       if (response.statusCode == 200) {
-        print("Backend xử lý frame thành công.");
+        final jsonData = json.decode(respStr);
+
+        final bool fireDetected = jsonData["fire_detected"] == true;
+        final String detectedClass = jsonData["class"] ?? "none";
+        final double? confidence =
+            jsonData["confidence"] != null
+                ? (jsonData["confidence"] as num).toDouble()
+                : null;
+
+        print(
+          "✅ Detect → fire=$fireDetected, class=$detectedClass, conf=$confidence",
+        );
+
+        // Sửa includes thành contains
+        if (fireDetected && ["fire", "smoke"].contains(detectedClass)) {
+          final timestamp = DateTime.now().toString();
+          print("🔥 Phát hiện $detectedClass lúc $timestamp");
+          // Không gọi _sendAlertToBackend, để backend xử lý
+        }
       } else {
-        print("Lỗi từ backend. Mã trạng thái: ${response.statusCode}");
+        print("❌ Detect API lỗi: ${response.statusCode} Body: $respStr");
       }
     } catch (e) {
-      print("Lỗi mạng khi gửi request đến backend: $e");
+      print("❌ Lỗi mạng khi gọi detect: $e");
     }
   }
 
   @override
   void dispose() {
-    // Rất quan trọng: Luôn gỡ bỏ listener và dispose controller
     _vlcController.removeListener(_frameProcessingListener);
     _vlcController.dispose();
     super.dispose();
@@ -120,7 +131,7 @@ class _CameraStreamScreenState extends State<CameraStreamScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.cameraName)),
+      appBar: AppBar(title: Text(widget.camera.cameraName)),
       body: Center(
         child: VlcPlayer(
           controller: _vlcController,

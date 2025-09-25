@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:frontend/repositories/fcm_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:frontend/services/notification_service.dart'; // Thêm import
 import '../services/auth_service.dart';
 import 'UI_device.dart';
 
@@ -31,15 +33,32 @@ class _LoginScreenState extends State<LoginScreen> {
             password: _passwordController.text.trim(),
           );
 
-      // Lấy ID token
-      final idToken = await userCredential.user?.getIdToken();
-      if (idToken != null) {
-        // Lưu token vào SharedPreferences
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('id_token', idToken);
-        print('Login successful, token saved: ${idToken.substring(0, 10)}...');
+      // --- Sắp xếp lại logic ở đây ---
+      final user = userCredential.user;
+      if (user != null) {
+        // 1. Khởi tạo NotificationService và yêu cầu quyền thông báo
+        final notificationService = NotificationService();
+        await notificationService.initialize();
+        bool hasPermission = await notificationService.requestPermission();
 
-        // Chuyển đến DeviceScreen
+        // 2. Nếu có quyền, lưu token FCM và token đăng nhập
+        await FcmRepository.saveFcmToken(user.uid);
+        if (hasPermission) {
+          await FcmRepository.saveFcmToken(user.uid);
+          print("FCM token đã lưu vào Firestore cho user ${user.uid}");
+
+          // Lấy ID token và lưu vào SharedPreferences
+          final idToken = await user.getIdToken();
+          if (idToken != null) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('id_token', idToken);
+            print(
+              'Login successful, token saved: ${idToken.substring(0, 10)}...',
+            );
+          }
+        }
+
+        // 3. Chuyển đến DeviceScreen sau khi hoàn tất các bước
         if (mounted) {
           Navigator.pushReplacement(
             context,
@@ -48,7 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       } else {
         setState(() {
-          _errorMessage = 'Không thể lấy ID token';
+          _errorMessage = 'Không thể lấy thông tin người dùng';
         });
       }
     } on FirebaseAuthException catch (e) {

@@ -1,9 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:frontend/screens/UI_notification.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../screens/UI_Add_Camera.dart';
 import '../screens/CameraStreamScreen.dart';
+import '../models/camera.dart';
+import '../models/alert.dart';
 
 class DeviceScreen extends StatefulWidget {
   const DeviceScreen({super.key});
@@ -13,32 +18,70 @@ class DeviceScreen extends StatefulWidget {
 }
 
 class _DeviceScreenState extends State<DeviceScreen> {
-  List<Map<String, dynamic>> _cameras = [];
+  List<Camera> _cameras = [];
+  List<Alert> _alerts = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadCameras();
+    _loadAlerts();
   }
 
-  // 🔹 Load camera từ SharedPreferences
   Future<void> _loadCameras() async {
     final prefs = await SharedPreferences.getInstance();
     List<String> saved = prefs.getStringList('cameras') ?? [];
     setState(() {
       _cameras =
-          saved.map((c) => jsonDecode(c) as Map<String, dynamic>).toList();
+          saved.map((c) {
+            try {
+              final data = jsonDecode(c) as Map<String, dynamic>;
+              return Camera(
+                id:
+                    data['id'] ??
+                    DateTime.now().millisecondsSinceEpoch.toString(),
+                cameraName: data['cameraName'] ?? 'Camera',
+                location: data['location'] ?? 'Không rõ',
+                streamUrl: data['streamUrl'] ?? '',
+              );
+            } catch (e) {
+              print("Lỗi giải mã camera: $e");
+              return Camera(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                cameraName: 'Camera lỗi',
+                location: 'Không rõ',
+                streamUrl: '',
+              );
+            }
+          }).toList();
     });
   }
 
-  // 🔹 Điều hướng sang AddCameraScreen và reload khi thêm xong
+  Future<void> _loadAlerts() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final snapshot =
+        await FirebaseFirestore.instance
+            .collection("users")
+            .doc(user.uid)
+            .collection("alerts")
+            .where('isRead', isEqualTo: false)
+            .get();
+    setState(() {
+      _alerts = snapshot.docs.map((doc) => Alert.fromJson(doc.data())).toList();
+      _isLoading = false;
+    });
+  }
+
   void _navigateToAddCameraScreen() async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const AddCameraScreen()),
     );
     if (result == true) {
-      _loadCameras(); // Reload danh sách
+      _loadCameras();
     }
   }
 
@@ -77,85 +120,129 @@ class _DeviceScreenState extends State<DeviceScreen> {
           ),
         ),
         child:
-            _cameras.isEmpty
-                ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        height: 200,
-                        width: 200,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Icon(
-                          Icons.devices,
-                          size: 100,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-                      const Text(
-                        'Chưa có camera nào. Thêm mới để bắt đầu!',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 16, color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                )
-                : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _cameras.length,
-                  itemBuilder: (context, index) {
-                    final cam = _cameras[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 3,
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(16),
-                        leading: const Icon(
-                          Icons.videocam,
-                          size: 40,
-                          color: Colors.red,
-                        ),
-                        title: Text(cam['cameraName'] ?? 'Camera'),
-                        subtitle: Text(
-                          "Vị trí: ${cam['location'] ?? 'Không rõ'}",
-                        ),
-                        trailing: ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (_) => CameraStreamScreen(
-                                      streamUrl: cam['streamUrl'],
-                                      cameraName: cam['cameraName'],
-                                    ),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : Column(
+                  children: [
+                    if (_alerts.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          'Cảnh báo mới: ${_alerts.length}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red,
                           ),
-                          child: const Text("Xem"),
                         ),
                       ),
-                    );
-                  },
+                    Expanded(
+                      child:
+                          _cameras.isEmpty
+                              ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      height: 200,
+                                      width: 200,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[200],
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Icon(
+                                        Icons.devices,
+                                        size: 100,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 30),
+                                    const Text(
+                                      'Chưa có camera nào. Thêm mới để bắt đầu!',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                              : ListView.builder(
+                                padding: const EdgeInsets.all(16),
+                                itemCount: _cameras.length,
+                                itemBuilder: (context, index) {
+                                  final cam = _cameras[index];
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    elevation: 3,
+                                    child: ListTile(
+                                      contentPadding: const EdgeInsets.all(16),
+                                      leading: const Icon(
+                                        Icons.videocam,
+                                        size: 40,
+                                        color: Colors.red,
+                                      ),
+                                      title: Text(cam.cameraName),
+                                      subtitle: Text("Vị trí: ${cam.location}"),
+                                      trailing: ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder:
+                                                  (_) => CameraStreamScreen(
+                                                    camera: cam,
+                                                  ),
+                                            ),
+                                          );
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                        ),
+                                        child: const Text("Xem"),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                    ),
+                  ],
                 ),
       ),
       bottomNavigationBar: BottomNavBar(
         initialIndex: 0,
-        onTabChanged: (index) {},
+        onTabChanged: (index) {
+          switch (index) {
+            case 0:
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const DeviceScreen()),
+              );
+              break;
+            case 1:
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationScreen()),
+              );
+              break;
+            // case 2:
+            //   Navigator.pushReplacement(
+            //     context,
+            //     MaterialPageRoute(builder: (_) => ProfileScreen()),
+            //   );
+            //   break;
+          }
+        },
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToAddCameraScreen,

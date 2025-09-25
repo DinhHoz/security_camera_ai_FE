@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Alert {
   final String alertId;
   final String cameraId;
@@ -7,6 +9,9 @@ class Alert {
   final String imageUrl;
   final String status;
   final DateTime timestamp;
+  final double? confidence;
+  final String? fcmMessageId;
+  final bool isRead;
 
   Alert({
     required this.alertId,
@@ -17,6 +22,9 @@ class Alert {
     required this.imageUrl,
     required this.status,
     required this.timestamp,
+    this.confidence,
+    this.fcmMessageId,
+    this.isRead = false,
   });
 
   factory Alert.fromJson(Map<String, dynamic> json) {
@@ -28,7 +36,36 @@ class Alert {
       type: json['type'] ?? 'unknown',
       imageUrl: json['imageUrl'] ?? '',
       status: json['status'] ?? 'active',
-      timestamp: DateTime.parse(json['timestamp']),
+      timestamp:
+          json['timestamp'] is Timestamp
+              ? (json['timestamp'] as Timestamp).toDate()
+              : (json['timestamp'] is String
+                  ? DateTime.parse(json['timestamp'])
+                  : DateTime.now()),
+      confidence:
+          json['confidence'] != null
+              ? (json['confidence'] is num
+                  ? json['confidence'].toDouble()
+                  : null)
+              : null,
+      fcmMessageId: json['fcmMessageId'],
+      isRead: json['isRead'] ?? false,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'alertId': alertId,
+      'cameraId': cameraId,
+      'cameraName': cameraName,
+      'location': location,
+      'type': type,
+      'imageUrl': imageUrl,
+      'status': status,
+      'timestamp': Timestamp.fromDate(timestamp),
+      'confidence': confidence,
+      'fcmMessageId': fcmMessageId,
+      'isRead': isRead,
+    };
   }
 }
