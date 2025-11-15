@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:frontend/services/notification_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/UI_device.dart';
@@ -92,14 +93,14 @@ class AuthWrapper extends StatelessWidget {
   }
 }
 
-// Future<void> _clearInvalidToken() async {
-//   try {
-//     final prefs = await SharedPreferences.getInstance();
-//     await prefs.remove('id_token');
-//   } catch (e) {
-//     print('Lỗi khi xóa token: $e');
-//   }
-// }
+Future<void> _clearInvalidToken() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('id_token');
+  } catch (e) {
+    print('Lỗi khi xóa token: $e');
+  }
+}
 
 // import 'package:flutter/material.dart';
 // import 'screens/UI_notification.dart';
@@ -117,6 +118,39 @@ class AuthWrapper extends StatelessWidget {
 //       theme: ThemeData(primarySwatch: Colors.blue),
 //       home: const NotificationScreen(), // Khởi chạy DeviceScreen
 //       debugShowCheckedModeBanner: false, // Tắt banner debug
+//     );
+//   }
+// }
+// ================================================================
+
+// void main() async {
+//   WidgetsFlutterBinding.ensureInitialized();
+//   // KHÔNG CẦN Firebase.initializeApp() nếu bạn chỉ muốn xem UI
+
+//   // Các dòng khởi tạo Firebase/FCM/Local Notification sẽ được bỏ qua
+//   // await Firebase.initializeApp();
+//   // await notificationService.initialize();
+//   // FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+//   // ...
+
+//   runApp(const MyApp());
+// }
+
+// // --------------------------------------------------
+
+// class MyApp extends StatelessWidget {
+//   const MyApp({super.key});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return MaterialApp(
+//       debugShowCheckedModeBanner: false,
+//       title: 'UI Development Mode',
+//       theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+
+//       // 🚀 CHỈNH SỬA TẠI ĐÂY: Trỏ thẳng home đến DeviceScreen
+//       home: const DeviceScreen(),
+//       // hoặc home: const UI_device(), nếu tên class của bạn là UI_device
 //     );
 //   }
 // }

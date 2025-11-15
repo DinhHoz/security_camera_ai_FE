@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import '../screens/UI_device.dart'; // Import DeviceScreen
-import '../screens/UI_notification.dart'; // Import NotificationScreen
+import '../screens/UI_device.dart';
+import '../screens/UI_notification.dart';
+// 🚀 1. THÊM IMPORT CHO PROFILE SCREEN
+import '../screens/UI_profile.dart'; // Giả định tên file ProfileScreen của bạn
 
 class BottomNavBar extends StatefulWidget {
-  final int initialIndex; // Chỉ số tab khởi đầu
-  final Function(int) onTabChanged; // Callback khi tab thay đổi
+  final int initialIndex;
+  final Function(int) onTabChanged;
 
   const BottomNavBar({
     super.key,
@@ -31,6 +33,8 @@ class _BottomNavBarState extends State<BottomNavBar> {
         _selectedIndex = index;
       });
       widget.onTabChanged(index); // Gọi callback để thông báo thay đổi tab
+
+      // 🚀 2. CẬP NHẬT LOGIC ĐIỀU HƯỚNG
       switch (index) {
         case 0:
           Navigator.pushReplacement(
@@ -44,12 +48,13 @@ class _BottomNavBarState extends State<BottomNavBar> {
             MaterialPageRoute(builder: (_) => const NotificationScreen()),
           );
           break;
-        // case 2:
-        //   Navigator.pushReplacement(
-        //     context,
-        //     MaterialPageRoute(builder: (_) => ProfileScreen()),
-        //   );
-        //   break;
+        case 2:
+          // Điều hướng đến ProfileScreen
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          );
+          break;
       }
     }
   }
@@ -59,16 +64,22 @@ class _BottomNavBarState extends State<BottomNavBar> {
     return BottomNavigationBar(
       type: BottomNavigationBarType.fixed,
       backgroundColor: Colors.white,
-      selectedItemColor: Colors.red,
-      unselectedItemColor: Colors.grey,
+      selectedItemColor: Colors.lightBlue,
+      unselectedItemColor: Colors.blueGrey,
+      selectedFontSize: 14,
+      unselectedFontSize: 13,
       elevation: 8,
+      // 🚀 3. CẬP NHẬT DANH SÁCH ITEMS
       items: const [
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Trang chủ'),
         BottomNavigationBarItem(
           icon: Icon(Icons.notifications_outlined),
           label: 'Thông báo',
         ),
-        BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Tôi'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_outline),
+          label: 'Tôi', // Tab thứ ba cho Profile
+        ),
       ],
       currentIndex: _selectedIndex,
       onTap: _onItemTapped,

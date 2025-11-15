@@ -7,6 +7,9 @@ class AlertDetailScreen extends StatelessWidget {
 
   const AlertDetailScreen({super.key, required this.alertId});
 
+  static const Color primaryColor = Colors.lightBlue;
+  static const Color secondaryColor = Colors.lightBlueAccent;
+
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -23,12 +26,14 @@ class AlertDetailScreen extends StatelessWidget {
         .doc(alertId);
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Alert Detail")),
+      backgroundColor: Colors.grey.shade100,
       body: FutureBuilder<DocumentSnapshot>(
         future: alertRef.get(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(
+              child: CircularProgressIndicator(color: primaryColor),
+            );
           }
 
           if (!snapshot.hasData || !snapshot.data!.exists) {
@@ -39,55 +44,219 @@ class AlertDetailScreen extends StatelessWidget {
           final timestamp = data['timestamp'];
           final timeString =
               timestamp is Timestamp
-                  ? timestamp.toDate().toString()
+                  ? _formatTimestamp(timestamp)
                   : timestamp is String
-                  ? DateTime.parse(timestamp).toString()
+                  ? _formatTimestamp(
+                    Timestamp.fromDate(DateTime.parse(timestamp)),
+                  )
                   : 'Unknown Time';
 
-          // Cập nhật trạng thái isRead khi xem
-          _updateReadStatus(alertRef);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _updateReadStatus(alertRef);
+          });
 
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Text(
-                    "📷 Camera: ${data['cameraName'] ?? 'Unknown'}",
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  Text("🆔 Camera ID: ${data['cameraId'] ?? ''}"),
-                  Text("📍 Location: ${data['location'] ?? ''}"),
-                  Text("🔥 Type: ${data['type'] ?? ''}"),
-                  Text("⏰ Time: $timeString"),
-                  const SizedBox(height: 16),
-                  if (data['imageUrl'] != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        data['imageUrl'],
-                        fit: BoxFit.cover,
-                        errorBuilder:
-                            (context, error, stackTrace) =>
-                                const Icon(Icons.broken_image, size: 80),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
+          return _buildDetailedUI(context, data, timeString);
         },
       ),
     );
   }
 
-  // Cập nhật trạng thái isRead
+  Widget _buildDetailedUI(
+    BuildContext context,
+    Map<String, dynamic> data,
+    String timeString,
+  ) {
+    final title = data['cameraName'] ?? 'Chi tiết Cảnh báo';
+    final imageUrl = data['imageUrl'];
+
+    return CustomScrollView(
+      slivers: <Widget>[
+        SliverAppBar(
+          title: Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+            ),
+          ),
+          backgroundColor: primaryColor,
+          floating: true,
+          pinned: true,
+          elevation: 4,
+        ),
+        SliverList(
+          delegate: SliverChildListDelegate([
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Card chứa thông tin chính (chữ nhỏ hơn)
+                  Card(
+                    elevation: 6,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildInfoRow(
+                            icon: Icons.flash_on,
+                            label: "Loại Cảnh báo",
+                            value: data['type'] ?? 'Không xác định',
+                            color: Colors.redAccent,
+                            fontSize: 14, // Giảm cỡ chữ
+                          ),
+                          _buildDivider(),
+                          _buildInfoRow(
+                            icon: Icons.access_time,
+                            label: "Thời gian",
+                            value: timeString,
+                            color: secondaryColor,
+                            fontSize: 14, // Giảm cỡ chữ
+                          ),
+                          _buildDivider(),
+                          _buildInfoRow(
+                            icon: Icons.location_on,
+                            label: "Vị trí",
+                            value: data['location'] ?? 'N/A',
+                            color: Colors.green,
+                            fontSize: 14, // Giảm cỡ chữ
+                          ),
+                          _buildDivider(),
+                          _buildInfoRow(
+                            icon: Icons.camera_alt,
+                            label: "ID Camera",
+                            value: data['cameraId'] ?? 'N/A',
+                            color: Colors.grey.shade600,
+                            fontSize: 14, // Giảm cỡ chữ
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 30),
+
+                  // Hình ảnh (to hơn)
+                  if (imageUrl != null)
+                    Hero(
+                      tag: 'alert_image_$alertId',
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: FadeInImage.assetNetwork(
+                          placeholder: 'assets/placeholder.png',
+                          image: imageUrl,
+                          fit: BoxFit.cover,
+                          height:
+                              300, // ✅ Tăng chiều cao của ảnh (từ 200 lên 300)
+                          width: double.infinity,
+                          imageErrorBuilder:
+                              (context, error, stackTrace) => Container(
+                                color: primaryColor,
+                                height: 300, // ✅ Cập nhật chiều cao lỗi ảnh
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.broken_image,
+                                    size: 80,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                        ),
+                      ),
+                    ),
+                  if (imageUrl != null) const SizedBox(height: 30),
+
+                  // Nút hành động
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Đang mở hành động liên quan..."),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.videocam, size: 24),
+                      label: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12.0),
+                        child: Text(
+                          "Xem lại video",
+                          style: TextStyle(fontSize: 18),
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 8,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      ],
+    );
+  }
+
+  // Helper Widgets - Đã thêm tham số fontSize
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    double fontSize = 16, // ✅ Thêm tham số fontSize mặc định 16
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: fontSize * 0.9,
+                  color: Colors.grey,
+                ), // Label nhỏ hơn chút so với value
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: fontSize, // ✅ Sử dụng fontSize được truyền vào
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 4.0),
+      child: Divider(height: 1, color: Colors.black12),
+    );
+  }
+
   Future<void> _updateReadStatus(DocumentReference alertRef) async {
     try {
       await alertRef.update({'isRead': true});
@@ -95,5 +264,10 @@ class AlertDetailScreen extends StatelessWidget {
     } catch (e) {
       print("❌ Lỗi cập nhật isRead: $e");
     }
+  }
+
+  String _formatTimestamp(Timestamp timestamp) {
+    final dateTime = timestamp.toDate();
+    return "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')} - ${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}";
   }
 }
