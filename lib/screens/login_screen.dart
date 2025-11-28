@@ -1,15 +1,17 @@
 import 'dart:convert';
-
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:frontend/repositories/fcm_repository.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:frontend/config/api_config.dart'; // ⭐ Thêm dòng này
+import 'package:frontend/repositories/fcm_repository.dart';
 import 'package:frontend/services/notification_service.dart';
 import '../services/auth_service.dart';
+
 import 'UI_device.dart';
-import 'UI_register.dart'; // Giả định tên file đăng ký của bạn
+import 'UI_register.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,12 +26,12 @@ class _LoginScreenState extends State<LoginScreen>
   final _passwordController = TextEditingController();
   String _errorMessage = '';
   bool _isLoading = false;
-  bool _isVisible = false; // Để animation fade-in
+  bool _isVisible = false;
+
   late AnimationController _controller;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _fadeAnimation;
 
-  // Màu chủ đạo (primary) và gradient cho năm 2025 style
   final primaryColor = Colors.lightBlue.shade700;
   final gradient = LinearGradient(
     colors: [Colors.lightBlue.shade50, Colors.white],
@@ -40,36 +42,33 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void initState() {
     super.initState();
-    // Khởi tạo AnimationController
+
     _controller = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
 
-    // Slide animation cho các field và nút
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3), // Trượt lên từ dưới
+      begin: const Offset(0, 0.25),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
-    // Fade animation
     _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
+      begin: 0,
+      end: 1,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
 
-    // Trigger animation sau khi build
-    Future.delayed(const Duration(milliseconds: 100), () {
-      setState(() {
-        _isVisible = true;
-        _controller.forward();
-      });
+    /// ⭐ An toàn tránh crash do navigation
+    Future.delayed(const Duration(milliseconds: 120), () {
+      if (!mounted) return;
+      setState(() => _isVisible = true);
+      _controller.forward();
     });
   }
 
-  // --------------------------------------------------
-  // LOGIC XỬ LÝ (KHÔNG THAY ĐỔI)
-  // --------------------------------------------------
+  // -------------------------------------------------------
+  // LOGIN
+  // -------------------------------------------------------
   Future<void> _login() async {
     setState(() {
       _isLoading = true;
@@ -84,100 +83,51 @@ class _LoginScreenState extends State<LoginScreen>
           );
 
       final user = userCredential.user;
-      if (user != null) {
-        final notificationService = NotificationService();
-        await notificationService.initialize();
-        bool hasPermission = await notificationService.requestPermission();
+      if (user == null) {
+        setState(() => _errorMessage = "Không thể lấy thông tin người dùng.");
+        return;
+      }
 
-        await FcmRepository.saveFcmToken(user.uid);
-        final fcmToken = await FirebaseMessaging.instance.getToken();
-        print("🔥 FCM Token (client): $fcmToken");
+      // Lấy token FCM
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      final idToken = await user.getIdToken();
 
-        final idToken = await user.getIdToken();
+      // ⭐ API URL từ .env
+      final url = ApiConfig.path("/users/update-token");
 
-        await http.post(
-          Uri.parse("http://<IP_BACKEND>:3000/users/update-token"),
-          headers: {
-            "Authorization": "Bearer $idToken",
-            "Content-Type": "application/json",
-          },
-          body: jsonEncode({"fcmToken": fcmToken}),
+      await http.post(
+        Uri.parse(url),
+        headers: {
+          "Authorization": "Bearer $idToken",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({"fcmToken": fcmToken}),
+      );
+
+      // Lưu token local
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString("id_token", idToken ?? "");
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const DeviceScreen()),
         );
-
-        print("🔥 Token đã cập nhật lên backend!");
-        if (hasPermission) {
-          print("FCM token đã lưu vào Firestore cho user ${user.uid}");
-
-          final idToken = await user.getIdToken();
-          if (idToken != null) {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('id_token', idToken);
-            print(
-              'Login successful, token saved: ${idToken.substring(0, 10)}...',
-            );
-          }
-        }
-
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const DeviceScreen()),
-          );
-        }
-      } else {
-        setState(() {
-          _errorMessage = 'Không thể lấy thông tin người dùng';
-        });
       }
     } on FirebaseAuthException catch (e) {
       setState(() {
-        _errorMessage = e.message ?? 'Đã xảy ra lỗi khi đăng nhập';
+        _errorMessage = e.message ?? "Đăng nhập thất bại.";
       });
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Lỗi không xác định: $e';
-      });
+      setState(() => _errorMessage = "Lỗi không xác định: $e");
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _logout(BuildContext context) async {
-    await AuthService.signOut();
-    if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false,
-      );
-    }
-  }
-
-  // 🚀 LOGIC ĐIỀU HƯỚNG ĐẾN TRANG ĐĂNG KÝ
-  void _navigateToRegisterScreen() {
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const RegisterScreen()),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  // --------------------------------------------------
-  // UI HELPER: TextField với neumorphic style
-  // --------------------------------------------------
+  // -------------------------------------------------------
+  // UI Helper
+  // -------------------------------------------------------
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -187,16 +137,13 @@ class _LoginScreenState extends State<LoginScreen>
   }) {
     return Container(
       decoration: BoxDecoration(
-        color:
-            Theme.of(context).brightness == Brightness.dark
-                ? Colors.grey.shade800
-                : Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -204,13 +151,8 @@ class _LoginScreenState extends State<LoginScreen>
         controller: controller,
         keyboardType: keyboardType,
         obscureText: obscureText,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: TextStyle(
-            color: primaryColor.withOpacity(0.8),
-            fontWeight: FontWeight.w500,
-          ),
           prefixIcon: Icon(icon, color: primaryColor),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
@@ -225,40 +167,36 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // --------------------------------------------------
-  // UI BUILD
-  // --------------------------------------------------
+  @override
+  void dispose() {
+    _controller.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // -------------------------------------------------------
+  // UI
+  // -------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true, // Để gradient phủ đầy
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        // leading: IconButton(
-        //   icon: const Icon(Icons.arrow_back, color: Colors.black87),
-        //   onPressed: () => Navigator.pop(context),
-        // ),
-      ),
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: Container(
-        decoration: BoxDecoration(gradient: gradient), // Gradient background
+        decoration: BoxDecoration(gradient: gradient),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 28.0,
-              vertical: 20.0,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
             child: AnimatedOpacity(
-              opacity: _isVisible ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 800),
+              opacity: _isVisible ? 1 : 0,
+              duration: const Duration(milliseconds: 600),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. Icon / Logo với animation scale
                   AnimatedScale(
-                    scale: _isVisible ? 1.0 : 0.8,
-                    duration: const Duration(milliseconds: 600),
+                    scale: _isVisible ? 1 : 0.8,
+                    duration: const Duration(milliseconds: 500),
                     child: Icon(
                       Icons.security_update_good,
                       size: 90,
@@ -267,36 +205,28 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                   const SizedBox(height: 32),
 
-                  // 2. Tiêu đề với font hệ thống
+                  // Title
                   const Text(
-                    'Đăng nhập Hệ thống',
+                    "Đăng nhập Hệ thống",
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Chào mừng trở lại! Vui lòng nhập thông tin của bạn.',
+                    "Chào mừng trở lại! Vui lòng nhập thông tin của bạn.",
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w400,
-                    ),
+                    style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 48),
 
-                  // 3. Trường nhập Email với slide animation
+                  // Email
                   SlideTransition(
                     position: _slideAnimation,
                     child: FadeTransition(
                       opacity: _fadeAnimation,
                       child: _buildTextField(
                         controller: _emailController,
-                        label: 'Email',
+                        label: "Email",
                         icon: Icons.email,
                         keyboardType: TextInputType.emailAddress,
                       ),
@@ -304,79 +234,57 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                   const SizedBox(height: 24),
 
-                  // 4. Trường nhập Mật khẩu với slide animation
+                  // Password
                   SlideTransition(
                     position: _slideAnimation,
                     child: FadeTransition(
                       opacity: _fadeAnimation,
                       child: _buildTextField(
                         controller: _passwordController,
-                        label: 'Mật khẩu',
+                        label: "Mật khẩu",
                         icon: Icons.lock,
                         obscureText: true,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 32),
 
-                  // 5. Thông báo lỗi với animation
-                  AnimatedOpacity(
-                    opacity: _errorMessage.isNotEmpty ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 300),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
+                  const SizedBox(height: 24),
+
+                  // Error
+                  if (_errorMessage.isNotEmpty)
+                    FadeTransition(
+                      opacity: _fadeAnimation,
                       child: Text(
                         _errorMessage,
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.red.shade700,
                           fontWeight: FontWeight.w600,
-                          fontSize: 15,
                         ),
                       ),
                     ),
-                  ),
 
-                  // 6. Nút Đăng nhập chính với elevation và scale animation khi nhấn
+                  const SizedBox(height: 20),
+
+                  // Login Button
                   _isLoading
-                      ? Center(
-                        child: CircularProgressIndicator(color: primaryColor),
-                      )
+                      ? Center(child: CircularProgressIndicator())
                       : SlideTransition(
                         position: _slideAnimation,
-                        child: FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: GestureDetector(
-                            onTapDown: (_) {
-                              _controller.reverse().then(
-                                (_) => _controller.forward(),
-                              );
-                            },
-                            child: AnimatedScale(
-                              scale: _isLoading ? 0.95 : 1.0,
-                              duration: const Duration(milliseconds: 100),
-                              child: ElevatedButton(
-                                onPressed: _login,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: primaryColor,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 18,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  elevation: 6,
-                                  shadowColor: primaryColor.withOpacity(0.4),
-                                ),
-                                child: const Text(
-                                  'Đăng nhập',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
+                        child: ElevatedButton(
+                          onPressed: _login,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Text(
+                            "Đăng nhập",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
@@ -384,34 +292,24 @@ class _LoginScreenState extends State<LoginScreen>
 
                   const SizedBox(height: 24),
 
-                  // 7. Liên kết Đăng ký với slide animation
+                  // Register link
                   SlideTransition(
                     position: _slideAnimation,
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: TextButton(
-                        onPressed: _navigateToRegisterScreen,
-                        child: RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            text: 'Chưa có tài khoản? ',
-                            style: TextStyle(
-                              color: primaryColor,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            children: [
-                              TextSpan(
-                                text: 'Đăng ký ngay',
-                                style: TextStyle(
-                                  color: primaryColor,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ],
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const RegisterScreen(),
                           ),
+                        );
+                      },
+                      child: Text(
+                        "Chưa có tài khoản? Đăng ký ngay",
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: primaryColor,
+                          decoration: TextDecoration.underline,
                         ),
                       ),
                     ),

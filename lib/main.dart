@@ -9,6 +9,7 @@ import 'screens/login_screen.dart';
 import 'screens/UI_device.dart';
 import 'services/fcm_alert_handler.dart'; // class xử lý FCM
 import 'repositories/fcm_repository.dart'; // lưu token Firestore
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 final notificationService = NotificationService();
 
@@ -23,6 +24,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  await dotenv.load(fileName: ".env");
 
   // Khởi tạo local notification service
   await notificationService.initialize();

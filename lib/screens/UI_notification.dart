@@ -326,7 +326,7 @@ class _NotificationScreenState extends State<NotificationScreen>
                             ),
                           ),
                           const PopupMenuItem<String>(
-                            value: 'date_today',
+                            value: 'date_today', 
                             child: Row(
                               children: [
                                 Icon(Icons.today, size: 20),
