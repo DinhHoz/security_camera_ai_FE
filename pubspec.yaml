@@ -45,28 +45,34 @@ dependencies:
   path_provider: ^2.1.2
   shared_preferences: ^2.2.2
   flutter_dotenv: ^5.1.0
-
+  cached_network_image: ^3.3.0
   # Media
   video_player: ^2.8.4
   camera: ^0.11.0+1
   flutter_vlc_player: ^7.4.4
   # flutter_webrtc: ^0.10.4 # Ví dụ
 
+  google_fonts: ^4.0.4
   # Notifications
   flutter_local_notifications: ^17.0.0
 
   # Network & MJPEG (Bắt buộc dùng phiên bản HTTP cũ để tương thích với flutter_mjpeg)
   flutter_mjpeg: ^2.0.4
-  http: ^0.13.6 # Đã hạ cấp
+  http: ^1.2.0
   http_parser: ^4.0.0
-
+  flutter_animate: ^4.5.0
+  flutter_staggered_grid_view: ^0.7.0
   # Utils
   intl: ^0.19.0
+
+dependency_overrides:
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
+  flutter_launcher_icons: ^0.13.1
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -114,3 +120,7 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/logo_nhom.jpg" # Đường dẫn tới ảnh logo của bạn

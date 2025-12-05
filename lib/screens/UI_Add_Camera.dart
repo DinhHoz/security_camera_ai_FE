@@ -86,7 +86,7 @@ class _AddCameraScreenState extends State<AddCameraScreen>
     setState(() => _isLoading = true);
 
     try {
-      const String apiUrl = 'http://192.168.1.214:3000/api/cameras';
+      const String apiUrl = 'http://172.20.10.2:3000/api/cameras';
       final authHeader = await AuthService.getAuthHeader();
 
       if (authHeader == null) {
